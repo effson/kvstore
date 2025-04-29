@@ -6,7 +6,7 @@
 #define RED   1
 #define BLACK 2
 
-#define ENABLE_KEY_CHAR 	0
+#define ENABLE_KEY_CHAR 	1
 
 #define MAX_KEY_LEN 		256
 #define MAX_VALUE_LEN 		1024
@@ -17,11 +17,11 @@ typedef char* KEY_TYPE;
 typedef int KEY_TYPE;
 #endif
 #define RBTREE_ENTRY(name, type) \
-	struct name{				\
-		struct type *right;\
-		struct type *left; \
-		struct type *parent;\
-		unsigned char color;\
+	struct name{				 \
+		struct type *right;		 \
+		struct type *left; 		 \
+		struct type *parent;	 \
+		unsigned char color;	 \
 	}
 
 typedef struct _rbtree_node {
@@ -152,8 +152,28 @@ void rbtree_insert_fixup(rbtree *rbt, rbtree_node *z) {
 void rbtree_insert(rbtree *rbt, KEY_TYPE key, void *value) {
 
     rbtree_node *z = (rbtree_node *)malloc(sizeof(rbtree_node));
-    z->key = key;
-    z->value = value;
+#if ENABLE_KEY_CHAR
+	z->key = malloc(strlen(key) + 1);	// +1，给'\0'
+	if (z->key == NULL) {
+		fprintf(stderr, "malloc key failed!\n");
+		free(z);
+		return;
+	}
+	strcpy(z->key, key);   // 复制字符串到z->key
+	
+	z->value = malloc(strlen(value) + 1);
+	if (z->value == NULL) {
+		fprintf(stderr, "malloc value failed!\n");
+		free(z->key);
+		free(z);
+		return;
+	}
+	strcpy(z->value, value);   // 复制value内容
+#else
+	z->key = key;
+	z->value = value;
+#endif
+
     z->node.left = rbt->nil;
 	z->node.right = rbt->nil;
 	z->node.parent = rbt->nil;
@@ -164,6 +184,18 @@ void rbtree_insert(rbtree *rbt, KEY_TYPE key, void *value) {
 
     while (x != rbt->nil) {
         y = x;
+		
+#if ENABLE_KEY_CHAR
+		if (strcmp(z->key, x->key) < 0) {
+           	x = x->node.left;
+        } else if (strcmp(z->key, x->key) > 0) {
+            x = x->node.right;
+        } else {
+			return;
+		}
+	
+#else
+
         if (z->key < x->key) {
             x = x->node.left;
         } else if (z->key > x->key) {
@@ -171,12 +203,17 @@ void rbtree_insert(rbtree *rbt, KEY_TYPE key, void *value) {
         } else {
 			return;
 		}
+#endif
     }
 
     z->node.parent = y;
     if (y == rbt->nil) {
         rbt->root = z;
+#if ENABLE_KEY_CHAR
+	} else if (strcmp(z->key, y->key) < 0) {
+#else
     } else if (z->key < y->key) {
+#endif
         y->node.left = z;
     } else {
         y->node.right = z;
@@ -189,12 +226,25 @@ void rbtree_insert(rbtree *rbt, KEY_TYPE key, void *value) {
 rbtree_node* rbtree_search(rbtree *rbt, KEY_TYPE key) {
 
     rbtree_node *x = rbt->root;
-    while (x != rbt->nil && key != x->key) {
-        if (key < x->key)
-            x = x->node.left;
-        else
+#if ENABLE_KEY_CHAR
+	while (x != rbt->nil && (strcmp(key, x->key) != 0)) {
+        if (strcmp(key, x->key) < 0){
+			x = x->node.left;
+        }
+        else{
             x = x->node.right;
+		}
+	}
+#else
+    while (x != rbt->nil && key != x->key) {
+        if (key < x->key) {
+            x = x->node.left;
+        }
+        else {
+            x = x->node.right;
+        }
     }
+#endif
     return (x != rbt->nil) ? x : NULL;
 }
 
@@ -304,90 +354,82 @@ void rbtree_delete_fixup(rbtree *rbt, rbtree_node *x) {
 
 // 删除
 void rbtree_delete(rbtree *rbt, rbtree_node *z) {
-    rbtree_node *y = z;
-    rbtree_node *x;
-    unsigned char y_original_color = y->node.color;
+    rbtree_node *y; // 实际被删或者被移动的位置
+    rbtree_node *x; // y的子节点，用来调整树
+    unsigned char y_original_color;
 
-    if (z->node.left == rbt->nil) {
-        x = z->node.right;
-        if (z->node.parent == rbt->nil) {
-            rbt->root = x;
-        } else if (z == z->node.parent->node.left) {
-            z->node.parent->node.left = x;
-        } else {
-            z->node.parent->node.right = x;
-        }
-        x->node.parent = z->node.parent;
-    } else if (z->node.right == rbt->nil) {
-		
-        x = z->node.left;
-		
-        if (z->node.parent == rbt->nil) {
-            rbt->root = x;
-        } else if (z == z->node.parent->node.left) {
-            z->node.parent->node.left = x;
-        } else {
-            z->node.parent->node.right = x;
-        }
-        x->node.parent = z->node.parent;
+    if (z->node.left == rbt->nil || z->node.right == rbt->nil) {
+        y = z;
     } else {
-        y = rbtree_minimum(rbt, z->node.right);
-        y_original_color = y->node.color;
-        x = y->node.right;
-        if (y->node.parent == z) {
-			
-            x->node.parent = y;
-			
-        } else {
-        
-            if (y->node.parent != rbt->nil) {
-                y->node.parent->node.left = x;
-            }
-			
-            x->node.parent = y->node.parent;
-            y->node.right = z->node.right;
-            y->node.right->node.parent = y;
-			
-        }
-        if (z->node.parent == rbt->nil) {
-			
-            rbt->root = y;
-			
-        } else if (z == z->node.parent->node.left) {
-        
-            z->node.parent->node.left = y;
-			
-        } else {
-			
-            z->node.parent->node.right = y;
-			
-        }
-		
-        y->node.parent = z->node.parent;
-        y->node.left = z->node.left;
-        y->node.left->node.parent = y;
-        y->node.color = z->node.color;
-		
+        y = rbtree_successor(rbt, z);
     }
-	
-    if (y_original_color == BLACK) {
+
+    y_original_color = y->node.color;
+
+    if (y->node.left != rbt->nil) {   // x是y的唯一子节点（可能是nil）
+        x = y->node.left;
+    } else {
+        x = y->node.right;
+    }
+
+    x->node.parent = y->node.parent;
+
+    if (y->node.parent == rbt->nil) {
+        rbt->root = x;
+    } else if (y == y->node.parent->node.left) {
+        y->node.parent->node.left = x;
+    } else {
+        y->node.parent->node.right = x;
+    }
+
+    if (y != z) {
+#if ENABLE_KEY_CHAR
+		KEY_TYPE ktmp = z->key;
+		z->key = y->key;
+		y->key = ktmp;
 		
+		void *vtmp = z->value;
+		z->value = y->value;
+		y->value = vtmp;
+#else
+        z->key = y->key;
+        z->value = y->value;
+#endif
+    }
+
+    if (y_original_color == BLACK) {
         rbtree_delete_fixup(rbt, x);
     }
-	
-    free(z);
+#if ENABLE_KEY_CHAR
+	free(y->key);	 // 释放 key
+	free(y->value);  // 释放 value
+#endif
+
+    free(y);
 }
 
 void rbtree_inorder(rbtree *rbt, rbtree_node *node) {
 	if (node != rbt->nil) {
 		rbtree_inorder(rbt, node->node.left);
+#if ENABLE_KEY_CHAR
+		printf("key:%s, value:%s  ", node->key, node->value);
+#else
 		printf("key : %d", node->key);
+#endif
 		rbtree_inorder(rbt, node->node.right);
 	}
 }
 
 int main(){
+#if ENABLE_KEY_CHAR
+	KEY_TYPE KeyArray[20] = {"afsd","shg","hgs","yi","rbd","rts","qda","jeff","qinl","ziy",
+								"jijnj","grh","jmh","cjr","qon","zj","erh","fgj","yso","sdg"};
+	char *ValueArray[20] = {"Afsd","Shg","Hgs","Yi","Rbd","Rts","Qda","Jeff","Qinl","Ziy",
+								"Jijnj","Grh","Jmh","Cjr","Qon","Zj","Erh","Fgj","Yso","Sdg"};
+
+#else
 	int KeyArray[20] = {24, 25, 13, 35, 23, 26, 67, 47, 38, 98, 10, 19, 17, 49, 12, 21, 9, 18, 14, 15};
+#endif
 	rbtree *rbt = (rbtree *)malloc(sizeof(rbtree));
 
 	if (rbt == NULL) {
@@ -397,16 +439,20 @@ int main(){
 	rbtree_init(rbt);
 	int i = 0;
 	for (i = 0;i < 20;i ++) {
+#if ENABLE_KEY_CHAR
+		rbtree_insert(rbt, KeyArray[i], ValueArray[i]);
+#else
 		rbtree_insert(rbt, KeyArray[i], NULL);
+#endif
 	}
 	rbtree_inorder(rbt, rbt->root);
-	printf("-----------------\n");
+	printf("--------------\n");
 
 	for (i = 0;i < 20;i ++) {
 		rbtree_node *node = rbtree_search(rbt, KeyArray[i]);
 		rbtree_delete(rbt, node);
 	
 		rbtree_inorder(rbt, rbt->root);
-		printf("-----------------\n");
+		printf("--------------\n");
 	}
 }
