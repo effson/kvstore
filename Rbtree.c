@@ -159,6 +159,7 @@ void rbtree_insert(rbtree *rbt, KEY_TYPE key, void *value) {
 		free(z);
 		return;
 	}
+	memset(z->key, 0, strlen(key) + 1);
 	strcpy(z->key, key);   // 复制字符串到z->key
 	
 	z->value = malloc(strlen(value) + 1);
@@ -168,6 +169,7 @@ void rbtree_insert(rbtree *rbt, KEY_TYPE key, void *value) {
 		free(z);
 		return;
 	}
+	memset(z->value, 0, strlen(value) + 1);
 	strcpy(z->value, value);   // 复制value内容
 #else
 	z->key = key;
